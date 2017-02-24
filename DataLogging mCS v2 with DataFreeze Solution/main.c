@@ -57,6 +57,7 @@ uint8_t skip=0,overflowcount=0;
 
 //Global Variable for DataFreeze Reset
 uint8_t counter_datafreeze=0,flag_datafreeze=0,counter_main=0;
+uint8_t no_loc_flag=0;
 char str_datafreeze_main[100],str_datafreeze[100];
 
 //  Function Definition 
@@ -160,7 +161,7 @@ void main(){
 		}
 		
 		//  Get Location
-		get_loc(apn,loc_lat,loc_long);
+		//get_loc(apn,loc_lat,loc_long);
 		
 		//  To get signal strength
 		signal_strength=get_signalstrength();
@@ -529,6 +530,8 @@ uint8_t dataLog(uint8_t system_on,char* apn,char* Serial_num,uint8_t signal_stre
 	uint8_t data_counter=0;
 	char responseimp[512];
 	
+//	no_loc_flag++;
+	
 	// To acquire GPRS settings
 	data_counter=NumberOfAttempts;  // Number of attempts to be made if APN fetch fails
 	while (data_counter!=0){
@@ -758,15 +761,15 @@ uint8_t Log_data(char* responseimp,char* Serial_num,char* loc_lat,char* loc_long
 		_delay_ms(500);
 
 		// Sending data
-		UART_1_puts("GET /datalogging/write.php?tabname=\0");
+		UART_1_puts("PUT /datalogging/write.php?tabname=\0");
  		UART_1_puts(Serial_num);
  		UART_1_putc('&');
 		UART_1_puts(responseimp);
 		
-		UART_1_puts("&A46=");
- 		UART_1_puts(loc_lat);
- 		UART_1_puts("&A47=");
- 		UART_1_puts(loc_long);
+// 		UART_1_puts("&A46=");
+//  		UART_1_puts(loc_lat);
+//  		UART_1_puts("&A47=");
+//  		UART_1_puts(loc_long);
 		UART_1_puts(" HTTP/1.1\r\n\0");
 		UART_1_puts("Host:52.74.151.81\r\nAccept: */*\r\nAccept-Language: en-us\r\nConnection: Keep-Alive\r\n\r\n\x1A\0");
 		
@@ -924,116 +927,116 @@ uint8_t wait_for_data(){
 	return 1;  //  Data arrived
 }
 
- void get_loc(char* apn,char* loc_lat,char* loc_long){
-	char simresponse[70],set_apn_str[60],dummy[5];
-	uint8_t i=0,p=0,number_attempts=0,allokay=1;
-	
-	//  Initializing Latitude and Longitude if fetch is unsuccessful
-	loc_lat[0]='0';loc_lat[1]='\0';
-	loc_long[0]='0';loc_long[1]='\0';
-	
-	//  No. of attempts
-	number_attempts=NumberOfAttempts-4;  //  Because some ICs don't have this functionality so reducing number of attempts to save time
-	
-	while (number_attempts>0){
-		number_attempts--;
-		
-		if (allokay==0){
-			allokay=1;
-			UART_0_puts("Deactivating Bearer...\r\n");
-			//  Deactivitate Bearer
-			sim900_cmd("AT+SAPBR=0,1\r\n\0",simresponse);
-			_delay_ms(500);  //  Waiting for response
-		}
-		UART_0_puts("setting Connection type as GPRS...\r\n");
-		//  Setting connection type as GPRS
-		sim900_cmd("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"\r\n\0",simresponse);
-		if (strcmp(simresponse,"OK\0")!=0){
-			UART_0_puts("Response returns ERROR...\r\n");
-			continue;
-		}
-		UART_0_puts("Connection Type set to GPRS successfully...\r\n");
-		UART_0_puts("Setting APN for Loc....\r\n");
-		//  Setting APN
-		set_apn_str[0]='\0';
-		strcat(set_apn_str,"AT+SAPBR=3,1,\"APN\",\"");
-		strcat(set_apn_str,apn);
-		strcat(set_apn_str,"\"\r\n\0");
-		sim900_cmd(set_apn_str,simresponse);
-		if (strcmp(simresponse,"OK\0")!=0){
-			UART_0_puts("APN not set...returns ERROR...\r\n");
-			continue;
-		}
-		UART_0_puts("APN set successfully to ");
-		UART_0_puts(apn);
-		UART_0_puts("\r\n");
-		
-		//  Open Bearer
-		sim900_cmd("AT+SAPBR=1,1\r\n\0",simresponse);
-		if (strcmp(simresponse,"OK\0")!=0){
-			allokay=0;
-			continue;
-		}
-	
-		//  Query Bearer
-		sim900_cmd("AT+SAPBR=2,1\r\n\0",simresponse);
-		if(strcmp(simresponse,"ERROR\0")==0){
-			continue;
-		}
-		//  Enable reception again for OK
-		sbi(UCSR1B,RXEN1);
-		sim900_response(simresponse);
-		if (strcmp(simresponse,"OK\0")!=0){
-			allokay=0;
-			continue;
-		}
-		UART_0_puts("Fetching Location Coordinates...\r\n");
-		//  Get Latitude and Longitude
-		sim900_cmd("AT+CIPGSMLOC=1,1\r\n\0",simresponse);
-	    if(strcmp(simresponse,"ERROR\0")==0){
-			UART_0_puts("Location Not found....Retrying...\r\n");
-			continue;
-		}
-		
-		//  Enable reception again for OK
-		sbi(UCSR1B,RXEN1);
-		sim900_response(dummy);
-		if (strcmp(dummy,"OK\0")!=0){
-			allokay=0;
-			continue;
-		}
-	 
-		i=0;p=0;
-		while (simresponse[i]!=0x2C && i<70){  //  0x2C IS FOR ,
-			i++;
-		}
-		i++;
-		while (simresponse[i]!=0x2C && i<70){
-			loc_long[p]=simresponse[i];
-			p++;i++;	 
-		}
-		loc_long[p]='\0';
-		i++;
-		p=0;
-		while (simresponse[i]!=0x2C && i<70){
-			loc_lat[p]=simresponse[i];
-			p++;i++;
-		}
-		loc_lat[p]='\0';
-		UART_0_puts("Location Fetched Successfully...\r\n");
-		UART_0_puts("Latitude=");
-		UART_0_puts(loc_lat);
-		UART_0_puts("\r\n");
-		UART_0_puts("Longitude=");
-		UART_0_puts(loc_long);
-		UART_0_puts("\r\n");
-		//  Deactivitate Bearer 
-		sim900_cmd("AT+SAPBR=0,1\r\n\0",simresponse);
-		if (strcmp(simresponse,"OK\0")==0){
-			break;
-		}
-	}
- 
-	return;
-	 
- }
+  void get_loc(char* apn,char* loc_lat,char* loc_long){
+	  char set_apn_str[60], sim_Response[70];
+	  
+	  uint8_t number_attempts=0,allokay=1;
+	  
+	  //  No. of attempts
+	  number_attempts=NumberOfAttempts-2;		// Number of attempts reduced to 4
+// 	  
+// 	  if ((no_loc_flag%40) != 0)
+// 	  {
+// 		  loc_lat=0;loc_long=0;
+// 		  return;
+// 	  }
+// 	  else
+// 	  {
+// 		  
+// 	  no_loc_flag = 0;
+	  
+	  while (number_attempts>0){
+		  number_attempts--;
+		  
+		  if (!allokay){
+			  allokay=1;
+			  //  Deactivate Bearer
+			  sim900_cmd("AT+SAPBR=0,1\r\n",sim_Response);
+		  }
+		  
+		  //  Setting connection type as GPRS
+		  sim900_cmd("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"\r\n",sim_Response);
+		  if (strstr(sim_Response,"OK")==0){
+			  continue;
+		  }
+		  
+		  // Empty APN string
+		  memset(set_apn_str, 0, sizeof set_apn_str);
+		  strcat(set_apn_str,"AT+SAPBR=3,1,\"APN\",\"");
+		  strcat(set_apn_str,apn);
+		  strcat(set_apn_str,"\"\r\n");
+		  sim900_cmd(set_apn_str,sim_Response);
+		  if (strstr(sim_Response,"OK")==0){
+			  continue;
+		  }
+		  
+		  //  Open Bearer
+		  sim900_cmd("AT+SAPBR=1,1\r\n",sim_Response);
+		  if (strstr(sim_Response,"OK")==0){
+			  allokay=0;
+			  continue;
+		  }
+		  
+		  //  Query Bearer
+		  sim900_cmd("AT+SAPBR=2,1\r\n",sim_Response);
+		  if(strstr(sim_Response,"ERROR")!=0){
+			  continue;
+		  }
+		  
+		  if (strstr(sim_Response,"OK")==0){
+			  allokay=0;
+			  continue;
+		  }
+		  
+		  //  Get Latitude and Longitude
+		  sim900_cmd("AT+CIPGSMLOC=1,1\r\n",sim_Response);
+		  
+		  if (strstr(sim_Response,"OK")!=0)
+		  {
+			  if (strstr(sim_Response,"+CIPGSMLOC: 0")!=0)
+			  {
+				  char *s, *m, *e;
+				  
+				  memset(loc_lat, 0, sizeof loc_lat);
+				  memset(loc_long, 0, sizeof loc_long);
+				  
+				  s = strstr(sim_Response,"+CIPGSMLOC:");
+				  if (s != 0)
+				  {
+					  m = strchr(s+14,',');
+					  if ( m != 0)
+					  {
+						  e = strchr(m+1,',');
+						  if (e-s-14 < 20)
+						  {
+							  memcpy(loc_long, s+14, m-s-14);
+							  memcpy(loc_lat,  m+1, e-m-1);
+						  }
+					  }else
+					  {
+						  allokay=0;
+						  continue;
+					  }
+					  }else{
+					  allokay=0;
+					  continue;
+				  }
+			  }
+			  else{
+				  //  Deactivate Bearer
+				  sim900_cmd("AT+SAPBR=0,1\r\n",sim_Response);
+				  break;
+			  }
+		  }
+		  else{
+			  allokay=0;
+			  continue;
+		  }
+		  
+		  //  Deactivate Bearer
+		  sim900_cmd("AT+SAPBR=0,1\r\n",sim_Response);
+		  if (strstr(sim_Response,"OK")!=0){
+			  break;
+		  }
+	  }
+  }
